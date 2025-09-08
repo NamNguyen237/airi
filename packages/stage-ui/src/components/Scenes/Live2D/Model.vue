@@ -277,26 +277,26 @@ async function loadModel() {
 
         // If the model has eye blink parameters
         if (internalModel.eyeBlink != null) {
-        // For the part of the auto eye blink implementation in pixi-live2d-display
-        //
-        // this.emit("beforeMotionUpdate");
-        // const motionUpdated = this.motionManager.update(this.coreModel, now);
-        // this.emit("afterMotionUpdate");
-        // model.saveParameters();
-        // this.motionManager.expressionManager?.update(model, now);
-        // if (!motionUpdated) {
-        //   this.eyeBlink?.updateParameters(model, dt);
-        // }
-        //
-        // https://github.com/guansss/pixi-live2d-display/blob/31317b37d5e22955a44d5b11f37f421e94a11269/src/cubism4/Cubism4InternalModel.ts#L202-L214
-        //
-        // If the this.motionManager.update returns true, as motion updated flag on,
-        // the eye blink parameters will not be updated, in another hand, the auto eye blink is disabled
-        //
-        // Since we are hooking the motionManager.update method currently,
-        // and previously a always `true` was returned, eye blink parameters were never updated.
-        //
-        // Thous we are here to manually update the eye blink parameters within this hooked method
+          // For the part of the auto eye blink implementation in pixi-live2d-display
+          //
+          // this.emit("beforeMotionUpdate");
+          // const motionUpdated = this.motionManager.update(this.coreModel, now);
+          // this.emit("afterMotionUpdate");
+          // model.saveParameters();
+          // this.motionManager.expressionManager?.update(model, now);
+          // if (!motionUpdated) {
+          //   this.eyeBlink?.updateParameters(model, dt);
+          // }
+          //
+          // https://github.com/guansss/pixi-live2d-display/blob/31317b37d5e22955a44d5b11f37f421e94a11269/src/cubism4/Cubism4InternalModel.ts#L202-L214
+          //
+          // If the this.motionManager.update returns true, as motion updated flag on,
+          // the eye blink parameters will not be updated, in another hand, the auto eye blink is disabled
+          //
+          // Since we are hooking the motionManager.update method currently,
+          // and previously a always `true` was returned, eye blink parameters were never updated.
+          //
+          // Thous we are here to manually update the eye blink parameters within this hooked method
           internalModel.eyeBlink.updateParameters(model, (now - lastUpdateTime.value) / 1000)
         }
 
