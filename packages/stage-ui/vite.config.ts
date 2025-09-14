@@ -20,6 +20,14 @@ export default defineConfig({
     fs: {
       allow: [join('..', '..')],
     },
+    allowedHosts: //'all', // Cho phép tất cả các host (chỉ dùng trong môi trường phát triển cục bộ)
+    [
+      'localhost',
+      '127.0.0.1',
+      '.ngrok-free.app', // <-- Thêm dòng này để cho phép các subdomain của ngrok
+      // Hoặc thêm host cụ thể: ví dụ '3d0324e7742f.ngrok-free.app'
+      'juniordevnam--ollama-airi-airiollama-server-dev.modal.run'
+    ]
   },
   optimizeDeps: {
     include: [
