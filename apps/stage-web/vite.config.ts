@@ -174,6 +174,13 @@ export default defineConfig({
       '.ngrok-free.app', // <-- Thêm dòng này để cho phép các subdomain của ngrok
       // Hoặc thêm host cụ thể: ví dụ '3d0324e7742f.ngrok-free.app'
       'juniordevnam--ollama-airi-airiollama-server-dev.modal.run'
-    ]
+    ],
+    host: "0.0.0.0",
+    port: 5173,
+    hmr: {
+      protocol: "ws",
+      host: "localhost",
+      port: 5173,
+    }
   }
 })
