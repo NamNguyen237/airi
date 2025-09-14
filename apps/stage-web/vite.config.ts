@@ -173,7 +173,7 @@ export default defineConfig({
       '127.0.0.1',
       '.ngrok-free.app', // <-- Thêm dòng này để cho phép các subdomain của ngrok
       // Hoặc thêm host cụ thể: ví dụ '3d0324e7742f.ngrok-free.app'
-      'https://juniordevnam--ollama-airi-airiollama-server-dev.modal.run/'
+      'juniordevnam--ollama-airi-airiollama-server-dev.modal.run'
     ]
   }
 })
