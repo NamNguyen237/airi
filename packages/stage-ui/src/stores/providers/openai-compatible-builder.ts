@@ -28,25 +28,27 @@ export function buildOpenAICompatibleProvider(
 
   const finalCapabilities = capabilities || {
     listModels: async (config: Record<string, unknown>) => {
-      const provider = creator(
+      const provider = await creator(
         (config.apiKey as string || '').trim(),
         (config.baseUrl as string || '').trim(),
       )
-      if (provider.model) {
-        return (await listModels({
-          ...provider.model(),
-        })).map((model: any) => {
-          return {
-            id: model.id,
-            name: model.name || model.display_name || model.id,
-            provider: id,
-            description: model.description || '',
-            contextLength: model.context_length || 0,
-            deprecated: false,
-          } satisfies ModelInfo
-        })
+
+      if (!provider.model) {
+        return []
       }
-      return []
+
+      return (await listModels({
+        ...provider.model(),
+      })).map((model: any) => {
+        return {
+          id: model.id,
+          name: model.name || model.display_name || model.id,
+          provider: id,
+          description: model.description || '',
+          contextLength: model.context_length || 0,
+          deprecated: false,
+        } satisfies ModelInfo
+      })
     },
   }
 
@@ -54,9 +56,6 @@ export function buildOpenAICompatibleProvider(
     validateProviderConfig: async (config: Record<string, unknown>) => {
       const errors: Error[] = []
 
-      if (!config.apiKey) {
-        errors.push(new Error('API key is required'))
-      }
       if (!config.baseUrl) {
         errors.push(new Error('Base URL is required'))
       }
@@ -83,7 +82,7 @@ export function buildOpenAICompatibleProvider(
 
       if (validationChecks.includes('health')) {
         try {
-          responseChat = await fetch(`${config.baseUrl as string}chat/completions`, { headers: { Authorization: `Bearer ${config.apiKey}`, ...additionalHeaders }, method: 'POST' })
+          responseChat = await fetch(`${config.baseUrl as string}chat/completions`, { headers: { Authorization: `Bearer ${config.apiKey}`, ...additionalHeaders }, method: 'POST', body: '{"model": "test"}' })
           responseModelList = await fetch(`${config.baseUrl as string}models`, { headers: { Authorization: `Bearer ${config.apiKey}`, ...additionalHeaders } })
 
           if (!([200, 400, 401].includes(responseChat.status) || [200, 400, 401].includes(responseModelList.status))) {
@@ -119,7 +118,7 @@ export function buildOpenAICompatibleProvider(
         try {
           let response = responseChat
           if (!response) {
-            response = await fetch(`${config.baseUrl as string}chat/completions`, { headers: { Authorization: `Bearer ${config.apiKey}`, ...additionalHeaders }, method: 'POST' })
+            response = await fetch(`${config.baseUrl as string}chat/completions`, { headers: { Authorization: `Bearer ${config.apiKey}`, ...additionalHeaders }, method: 'POST', body: '{"model": "test"}' })
           }
 
           if (!response.ok) {

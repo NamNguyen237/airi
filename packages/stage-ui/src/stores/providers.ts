@@ -36,6 +36,7 @@ import {
 import { createOllama, createPlayer2 } from '@xsai-ext/providers-local'
 import {
   createChatProvider,
+  createEmbedProvider,
   createMetadataProvider,
   createModelProvider,
   merge,
@@ -153,6 +154,7 @@ export interface VoiceInfo {
   id: string
   name: string
   provider: string
+  compatibleModels?: string[]
   description?: string
   gender?: string
   deprecated?: boolean
@@ -252,7 +254,53 @@ export const useProvidersStore = defineStore('providers', () => {
       description: 'openrouter.ai',
       defaultBaseUrl: 'https://openrouter.ai/api/v1/',
       creator: createOpenRouter,
-      validation: ['health', 'model_list', 'chat_completions'],
+      validation: ['health', 'model_list'],
+      validators: {
+        validateProviderConfig: async (config) => {
+          const errors: Error[] = []
+
+          if (!config.apiKey) {
+            errors.push(new Error('API Key is required'))
+          }
+
+          if (!config.baseUrl) {
+            errors.push(new Error('Base URL is required'))
+          }
+
+          if (errors.length > 0) {
+            return { errors, reason: errors.map(e => e.message).join(', '), valid: false }
+          }
+
+          if (!isUrl(config.baseUrl as string) || new URL(config.baseUrl as string).host.length === 0) {
+            errors.push(new Error('Base URL is not absolute. Check your input.'))
+          }
+
+          if (!(config.baseUrl as string).endsWith('/')) {
+            errors.push(new Error('Base URL must end with a trailing slash (/).'))
+          }
+
+          if (errors.length > 0) {
+            return { errors, reason: errors.map(e => e.message).join(', '), valid: false }
+          }
+
+          const response = await fetch(`${config.baseUrl as string}chat/completions`, { headers: { Authorization: `Bearer ${config.apiKey}` }, method: 'POST', body: `{"model": "test","messages": [{"role": "user","content": "Hello, world"}],"stream": false}` })
+          const responseJson = await response.json()
+
+          if (!responseJson.user_id) {
+            return {
+              errors: [new Error(`OpenRouterError: ${responseJson.error.message}`)],
+              reason: `OpenRouterError: ${responseJson.error.message}`,
+              valid: false,
+            }
+          }
+
+          return {
+            errors: [],
+            reason: '',
+            valid: true,
+          }
+        },
+      },
     }),
     'app-local-audio-speech': buildOpenAICompatibleProvider({
       id: 'app-local-audio-speech',
@@ -508,102 +556,6 @@ export const useProvidersStore = defineStore('providers', () => {
         },
       },
     },
-    'vllm': {
-      id: 'vllm',
-      category: 'chat',
-      tasks: ['text-generation'],
-      nameKey: 'settings.pages.providers.provider.vllm.title',
-      name: 'vLLM',
-      descriptionKey: 'settings.pages.providers.provider.vllm.description',
-      description: 'vllm.ai',
-      iconColor: 'i-lobe-icons:vllm',
-      createProvider: async config => createOllama((config.baseUrl as string).trim()),
-      capabilities: {
-        listModels: async () => {
-          return [
-            {
-              id: 'llama-2-7b',
-              name: 'Llama 2 (7B)',
-              provider: 'vllm',
-              description: 'Meta\'s Llama 2 7B parameter model',
-              contextLength: 4096,
-            },
-            {
-              id: 'llama-2-13b',
-              name: 'Llama 2 (13B)',
-              provider: 'vllm',
-              description: 'Meta\'s Llama 2 13B parameter model',
-              contextLength: 4096,
-            },
-            {
-              id: 'llama-2-70b',
-              name: 'Llama 2 (70B)',
-              provider: 'vllm',
-              description: 'Meta\'s Llama 2 70B parameter model',
-              contextLength: 4096,
-            },
-            {
-              id: 'mistral-7b',
-              name: 'Mistral (7B)',
-              provider: 'vllm',
-              description: 'Mistral AI\'s 7B parameter model',
-              contextLength: 8192,
-            },
-            {
-              id: 'mixtral-8x7b',
-              name: 'Mixtral (8x7B)',
-              provider: 'vllm',
-              description: 'Mistral AI\'s Mixtral 8x7B MoE model',
-              contextLength: 32768,
-            },
-            {
-              id: 'custom',
-              name: 'Custom Model',
-              provider: 'vllm',
-              description: 'Specify a custom model name',
-              contextLength: 0,
-            },
-          ]
-        },
-      },
-      validators: {
-        validateProviderConfig: (config) => {
-          if (!config.baseUrl) {
-            return {
-              errors: [new Error('Base URL is required.')],
-              reason: 'Base URL is required. Default to http://localhost:8000/v1/ for vLLM.',
-              valid: false,
-            }
-          }
-
-          const res = baseUrlValidator.value(config.baseUrl)
-          if (res) {
-            return res
-          }
-
-          // Check if the vLLM is reachable
-          return fetch(`${(config.baseUrl as string).trim()}models`, { headers: (config.headers as HeadersInit) || undefined })
-            .then((response) => {
-              const errors = [
-                !response.ok && new Error(`vLLM returned non-ok status code: ${response.statusText}`),
-              ].filter(Boolean)
-
-              return {
-                errors,
-                reason: errors.filter(e => e).map(e => String(e)).join(', ') || '',
-                valid: response.ok,
-              }
-            })
-            .catch((err) => {
-              return {
-                errors: [err],
-                reason: `Failed to reach vLLM, error: ${String(err)} occurred.`,
-                valid: false,
-              }
-            })
-        },
-      },
-    },
     'lm-studio': {
       id: 'lm-studio',
       category: 'chat',
@@ -723,68 +675,99 @@ export const useProvidersStore = defineStore('providers', () => {
               name: 'Alloy',
               provider: 'openai-audio-speech',
               languages: [],
+              compatibleModels: ['tts-1', 'tts-1-hd'],
             },
             {
               id: 'ash',
               name: 'Ash',
               provider: 'openai-audio-speech',
               languages: [],
+              compatibleModels: ['tts-1', 'tts-1-hd'],
             },
             {
               id: 'ballad',
               name: 'Ballad',
               provider: 'openai-audio-speech',
               languages: [],
+              compatibleModels: ['tts-1', 'tts-1-hd'],
             },
             {
               id: 'coral',
               name: 'Coral',
               provider: 'openai-audio-speech',
               languages: [],
+              compatibleModels: ['tts-1', 'tts-1-hd'],
             },
             {
               id: 'echo',
               name: 'Echo',
               provider: 'openai-audio-speech',
               languages: [],
+              compatibleModels: ['tts-1', 'tts-1-hd'],
             },
             {
               id: 'fable',
               name: 'Fable',
               provider: 'openai-audio-speech',
               languages: [],
+              compatibleModels: ['tts-1', 'tts-1-hd'],
             },
             {
               id: 'onyx',
               name: 'Onyx',
               provider: 'openai-audio-speech',
               languages: [],
+              compatibleModels: ['tts-1', 'tts-1-hd'],
             },
             {
               id: 'nova',
               name: 'Nova',
               provider: 'openai-audio-speech',
               languages: [],
+              compatibleModels: ['tts-1', 'tts-1-hd'],
             },
             {
               id: 'sage',
               name: 'Sage',
               provider: 'openai-audio-speech',
               languages: [],
+              compatibleModels: ['tts-1', 'tts-1-hd'],
             },
             {
               id: 'shimmer',
               name: 'Shimmer',
               provider: 'openai-audio-speech',
               languages: [],
+              compatibleModels: ['tts-1', 'tts-1-hd'],
             },
             {
               id: 'verse',
               name: 'Verse',
               provider: 'openai-audio-speech',
               languages: [],
+              compatibleModels: ['tts-1', 'tts-1-hd'],
             },
           ] satisfies VoiceInfo[]
+        },
+        listModels: async () => {
+          return [
+            {
+              id: 'tts-1',
+              name: 'TTS-1',
+              provider: 'openai-audio-speech',
+              description: '',
+              contextLength: 0,
+              deprecated: false,
+            },
+            {
+              id: 'tts-1-hd',
+              name: 'TTS-1-HD',
+              provider: 'openai-audio-speech',
+              description: '',
+              contextLength: 0,
+              deprecated: false,
+            },
+          ]
         },
       },
       validators: {
@@ -864,55 +847,6 @@ export const useProvidersStore = defineStore('providers', () => {
       tasks: ['speech-to-text', 'automatic-speech-recognition', 'asr', 'stt'],
       creator: createOpenAI,
     }),
-    'azure-ai-foundry': {
-      id: 'azure-ai-foundry',
-      category: 'chat',
-      tasks: ['text-generation'],
-      nameKey: 'settings.pages.providers.provider.azure-ai-foundry.title',
-      name: 'Azure AI Foundry',
-      descriptionKey: 'settings.pages.providers.provider.azure-ai-foundry.description',
-      description: 'azure.com',
-      icon: 'i-lobe-icons:microsoft',
-      defaultOptions: () => ({}),
-      createProvider: async (config) => {
-        return await createAzure({
-          apiKey: async () => (config.apiKey as string).trim(),
-          resourceName: config.resourceName as string,
-          apiVersion: config.apiVersion as string,
-        })
-      },
-      capabilities: {
-        listModels: async (config) => {
-          return [{ id: config.modelId }].map((model) => {
-            return {
-              id: model.id as string,
-              name: model.id as string,
-              provider: 'azure-ai-foundry',
-              description: '',
-              contextLength: 0,
-              deprecated: false,
-            } satisfies ModelInfo
-          })
-        },
-      },
-      validators: {
-        validateProviderConfig: (config) => {
-          // return !!config.apiKey && !!config.resourceName && !!config.modelId
-
-          const errors = [
-            !config.apiKey && new Error('API key is required'),
-            !config.resourceName && new Error('Resource name is required'),
-            !config.modelId && new Error('Model ID is required'),
-          ]
-
-          return {
-            errors,
-            reason: errors.filter(e => e).map(e => String(e)).join(', ') || '',
-            valid: !!config.apiKey && !!config.resourceName && !!config.modelId,
-          }
-        },
-      },
-    },
     'anthropic': buildOpenAICompatibleProvider({
       id: 'anthropic',
       name: 'Anthropic',
@@ -938,17 +872,6 @@ export const useProvidersStore = defineStore('providers', () => {
       creator: createGoogleGenerativeAI,
       validation: ['health', 'model_list'],
     }),
-    'xai': buildOpenAICompatibleProvider({
-      id: 'xai',
-      name: 'xAI',
-      nameKey: 'settings.pages.providers.provider.xai.title',
-      descriptionKey: 'settings.pages.providers.provider.xai.description',
-      icon: 'i-lobe-icons:xai',
-      description: 'x.ai',
-      defaultBaseUrl: 'https://api.x.ai/v1/',
-      creator: createXAI,
-      validation: ['health', 'model_list'],
-    }),
     'deepseek': buildOpenAICompatibleProvider({
       id: 'deepseek',
       name: 'DeepSeek',
@@ -959,6 +882,21 @@ export const useProvidersStore = defineStore('providers', () => {
       defaultBaseUrl: 'https://api.deepseek.com/',
       creator: createDeepSeek,
       validation: ['health', 'model_list'],
+    }),
+    '302-ai': buildOpenAICompatibleProvider({
+      id: '302-ai',
+      name: '302.AI',
+      nameKey: 'settings.pages.providers.provider.302-ai.title',
+      descriptionKey: 'settings.pages.providers.provider.302-ai.description',
+      icon: 'i-lobe-icons:ai302',
+      description: '302.ai',
+      defaultBaseUrl: 'https://api.302.ai/v1/',
+      creator: (apiKey, baseURL = 'https://api.302.ai/v1/') => merge(
+        createChatProvider({ apiKey, baseURL }),
+        createEmbedProvider({ apiKey, baseURL }),
+        createModelProvider({ apiKey, baseURL }),
+      ),
+      validation: ['model_list'],
     }),
     'elevenlabs': {
       id: 'elevenlabs',
@@ -1198,6 +1136,7 @@ export const useProvidersStore = defineStore('providers', () => {
               id: voice.id,
               name: voice.name,
               provider: 'alibaba-cloud-model-studio',
+              compatibleModels: voice.compatible_models,
               previewURL: voice.preview_audio_url,
               languages: voice.languages,
               gender: voice.labels?.gender,
@@ -1323,6 +1262,162 @@ export const useProvidersStore = defineStore('providers', () => {
       validation: ['health', 'model_list'],
       iconColor: 'i-lobe-icons:together',
     }),
+    'azure-ai-foundry': {
+      id: 'azure-ai-foundry',
+      category: 'chat',
+      tasks: ['text-generation'],
+      nameKey: 'settings.pages.providers.provider.azure-ai-foundry.title',
+      name: 'Azure AI Foundry',
+      descriptionKey: 'settings.pages.providers.provider.azure-ai-foundry.description',
+      description: 'azure.com',
+      icon: 'i-lobe-icons:microsoft',
+      defaultOptions: () => ({}),
+      createProvider: async (config) => {
+        return await createAzure({
+          apiKey: async () => (config.apiKey as string).trim(),
+          resourceName: config.resourceName as string,
+          apiVersion: config.apiVersion as string,
+        })
+      },
+      capabilities: {
+        listModels: async (config) => {
+          return [{ id: config.modelId }].map((model) => {
+            return {
+              id: model.id as string,
+              name: model.id as string,
+              provider: 'azure-ai-foundry',
+              description: '',
+              contextLength: 0,
+              deprecated: false,
+            } satisfies ModelInfo
+          })
+        },
+      },
+      validators: {
+        validateProviderConfig: (config) => {
+          // return !!config.apiKey && !!config.resourceName && !!config.modelId
+
+          const errors = [
+            !config.apiKey && new Error('API key is required'),
+            !config.resourceName && new Error('Resource name is required'),
+            !config.modelId && new Error('Model ID is required'),
+          ]
+
+          return {
+            errors,
+            reason: errors.filter(e => e).map(e => String(e)).join(', ') || '',
+            valid: !!config.apiKey && !!config.resourceName && !!config.modelId,
+          }
+        },
+      },
+    },
+    'xai': buildOpenAICompatibleProvider({
+      id: 'xai',
+      name: 'xAI',
+      nameKey: 'settings.pages.providers.provider.xai.title',
+      descriptionKey: 'settings.pages.providers.provider.xai.description',
+      icon: 'i-lobe-icons:xai',
+      description: 'x.ai',
+      defaultBaseUrl: 'https://api.x.ai/v1/',
+      creator: createXAI,
+      validation: ['health', 'model_list'],
+    }),
+    'vllm': {
+      id: 'vllm',
+      category: 'chat',
+      tasks: ['text-generation'],
+      nameKey: 'settings.pages.providers.provider.vllm.title',
+      name: 'vLLM',
+      descriptionKey: 'settings.pages.providers.provider.vllm.description',
+      description: 'vllm.ai',
+      iconColor: 'i-lobe-icons:vllm',
+      createProvider: async config => createOllama((config.baseUrl as string).trim()),
+      capabilities: {
+        listModels: async () => {
+          return [
+            {
+              id: 'llama-2-7b',
+              name: 'Llama 2 (7B)',
+              provider: 'vllm',
+              description: 'Meta\'s Llama 2 7B parameter model',
+              contextLength: 4096,
+            },
+            {
+              id: 'llama-2-13b',
+              name: 'Llama 2 (13B)',
+              provider: 'vllm',
+              description: 'Meta\'s Llama 2 13B parameter model',
+              contextLength: 4096,
+            },
+            {
+              id: 'llama-2-70b',
+              name: 'Llama 2 (70B)',
+              provider: 'vllm',
+              description: 'Meta\'s Llama 2 70B parameter model',
+              contextLength: 4096,
+            },
+            {
+              id: 'mistral-7b',
+              name: 'Mistral (7B)',
+              provider: 'vllm',
+              description: 'Mistral AI\'s 7B parameter model',
+              contextLength: 8192,
+            },
+            {
+              id: 'mixtral-8x7b',
+              name: 'Mixtral (8x7B)',
+              provider: 'vllm',
+              description: 'Mistral AI\'s Mixtral 8x7B MoE model',
+              contextLength: 32768,
+            },
+            {
+              id: 'custom',
+              name: 'Custom Model',
+              provider: 'vllm',
+              description: 'Specify a custom model name',
+              contextLength: 0,
+            },
+          ]
+        },
+      },
+      validators: {
+        validateProviderConfig: (config) => {
+          if (!config.baseUrl) {
+            return {
+              errors: [new Error('Base URL is required.')],
+              reason: 'Base URL is required. Default to http://localhost:8000/v1/ for vLLM.',
+              valid: false,
+            }
+          }
+
+          const res = baseUrlValidator.value(config.baseUrl)
+          if (res) {
+            return res
+          }
+
+          // Check if the vLLM is reachable
+          return fetch(`${(config.baseUrl as string).trim()}models`, { headers: (config.headers as HeadersInit) || undefined })
+            .then((response) => {
+              const errors = [
+                !response.ok && new Error(`vLLM returned non-ok status code: ${response.statusText}`),
+              ].filter(Boolean)
+
+              return {
+                errors,
+                reason: errors.filter(e => e).map(e => String(e)).join(', ') || '',
+                valid: response.ok,
+              }
+            })
+            .catch((err) => {
+              return {
+                errors: [err],
+                reason: `Failed to reach vLLM, error: ${String(err)} occurred.`,
+                valid: false,
+              }
+            })
+        },
+      },
+    },
     'novita-ai': buildOpenAICompatibleProvider({
       id: 'novita-ai',
       name: 'Novita',
@@ -1332,7 +1427,7 @@ export const useProvidersStore = defineStore('providers', () => {
       description: 'novita.ai',
       defaultBaseUrl: 'https://api.novita.ai/openai/',
       creator: createNovita,
-      validation: ['health', 'model_list'],
+      validation: ['health', 'model_list', 'chat_completions'],
       iconColor: 'i-lobe-icons:novita',
     }),
     'fireworks-ai': buildOpenAICompatibleProvider({
